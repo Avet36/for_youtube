@@ -1,0 +1,1930 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neon Physics Stream — 10 автономных режимов со звуком</title>
+  <style>
+    :root {
+      --bg: #06070d;
+      --panel: rgba(12, 15, 28, 0.85);
+      --border: rgba(255, 255, 255, 0.13);
+      --text: #f3f6ff;
+      --muted: #9aa4c2;
+      --accent: #38bdf8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 45%, #111633 0%, #06070d 78%);
+      color: var(--text);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    #stage {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .hud-top {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      backdrop-filter: blur(12px);
+      pointer-events: none;
+      z-index: 10;
+      white-space: nowrap;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    }
+
+    .hud-badge {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .hud-divider {
+      width: 1px;
+      height: 14px;
+      background: var(--border);
+    }
+
+    .hud-info {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .hud-sub {
+      font-size: 12px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .controls {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      max-width: calc(100% - 20px);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      backdrop-filter: blur(14px);
+      z-index: 20;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+
+    .controls.hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-50%) translateY(18px);
+    }
+
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .btn:active {
+      transform: scale(0.96);
+    }
+
+    .btn.active {
+      background: rgba(56, 189, 248, 0.24);
+      border-color: rgba(56, 189, 248, 0.75);
+      color: #bae6fd;
+    }
+
+    .btn.sound-on {
+      background: rgba(34, 197, 94, 0.22);
+      border-color: rgba(34, 197, 94, 0.7);
+      color: #bbf7d0;
+    }
+
+    .obs-restore {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      z-index: 25;
+      padding: 6px 11px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(14, 17, 30, 0.55);
+      color: var(--muted);
+      cursor: pointer;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, color 0.2s ease;
+    }
+
+    .obs-restore.visible {
+      opacity: 0.4;
+      pointer-events: auto;
+    }
+
+    .obs-restore.visible:hover {
+      opacity: 1;
+      color: var(--text);
+    }
+
+    .sound-prompt {
+      position: absolute;
+      top: 58px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.2);
+      border: 1px solid rgba(56, 189, 248, 0.5);
+      color: #e0f2fe;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      z-index: 15;
+      transition: opacity 0.25s ease;
+      white-space: nowrap;
+    }
+
+    .sound-prompt.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .cta-toast {
+      position: absolute;
+      left: 50%;
+      top: 16%;
+      transform: translate(-50%, 14px) scale(0.75);
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 10px 20px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, rgba(16, 22, 42, 0.92), rgba(28, 18, 48, 0.92));
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      box-shadow: 0 0 26px rgba(56, 189, 248, 0.35), 0 10px 28px rgba(0, 0, 0, 0.55);
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 18;
+      overflow: hidden;
+      white-space: nowrap;
+      transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1), transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .cta-toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0px) scale(1);
+      animation: ctaFloat 2.8s ease-in-out infinite;
+    }
+
+    .cta-toast::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -120%;
+      width: 65%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+      transform: skewX(-20deg);
+    }
+
+    .cta-toast.show::after {
+      animation: ctaShimmer 1.8s ease-in-out 0.25s 2;
+    }
+
+    .cta-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.7));
+    }
+
+    .cta-text-like {
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .cta-text-sub {
+      background: linear-gradient(90deg, #f472b6, #fb7185, #fbbf24);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    @keyframes ctaFloat {
+      0%, 100% { margin-top: 0px; }
+      50% { margin-top: -6px; }
+    }
+
+    @keyframes ctaShimmer {
+      0% { left: -120%; }
+      100% { left: 160%; }
+    }
+
+    @media (max-width: 560px) {
+      .hud-top {
+        top: 10px;
+        padding: 6px 11px;
+        gap: 7px;
+      }
+      .hud-badge, .hud-info, .hud-sub {
+        font-size: 10.5px;
+      }
+      .controls {
+        bottom: 8px;
+        padding: 8px;
+      }
+      .btn {
+        padding: 5px 8px;
+        font-size: 10.5px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="canvas"></canvas>
+
+    <div class="hud-top">
+      <span class="hud-badge" id="hudRound">РАУНД #1</span>
+      <span class="hud-divider"></span>
+      <span class="hud-info" id="hudMode">1. Прорыв колец</span>
+      <span class="hud-divider"></span>
+      <span class="hud-sub" id="hudStat">Колец: 7</span>
+      <span class="hud-divider"></span>
+      <span class="hud-sub" id="hudTimer">45с</span>
+    </div>
+
+    <div class="cta-toast" id="ctaToast" aria-hidden="true">
+      <span class="cta-icon" id="ctaIcon">👍</span>
+      <span id="ctaLabel" class="cta-text-like">Like</span>
+    </div>
+
+    <button class="sound-prompt" id="soundPrompt" type="button">
+      Нажмите сюда, чтобы включить звук синтезатора
+    </button>
+
+    <div class="controls" id="controlsBar">
+      <div class="controls-row">
+        <button class="btn active" data-mode="rings" type="button">1. Кольца</button>
+        <button class="btn" data-mode="multiply" type="button">2. Лазер-x2</button>
+        <button class="btn" data-mode="duel" type="button">3. Арена 3-х</button>
+        <button class="btn" data-mode="growth" type="button">4. Рост шара</button>
+        <button class="btn" data-mode="pendulum" type="button">5. Маятники</button>
+        <button class="btn" data-mode="plinko" type="button">6. Плинко</button>
+        <button class="btn" data-mode="orbit" type="button">7. Орбиты</button>
+        <button class="btn" data-mode="spiral" type="button">8. Спираль</button>
+        <button class="btn" data-mode="territory" type="button">9. Захват</button>
+        <button class="btn" data-mode="breakout" type="button">10. Арканоид</button>
+      </div>
+      <div class="controls-row">
+        <button class="btn active" id="btnAutoRotate" type="button">Авто-смена: ВКЛ</button>
+        <button class="btn" id="btnSound" type="button">Звук: ВЫКЛ</button>
+        <button class="btn" id="btnRestart" type="button">Следующий режим</button>
+        <button class="btn" id="btnHideObs" type="button">Скрыть меню (OBS)</button>
+      </div>
+    </div>
+
+    <button class="obs-restore" id="btnShowObs" type="button" title="Показать панель (клавиша H)">
+      Меню (H)
+    </button>
+  </div>
+
+  <script>
+    (function () {
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+
+      const hudRound = document.getElementById('hudRound');
+      const hudMode = document.getElementById('hudMode');
+      const hudStat = document.getElementById('hudStat');
+      const hudTimer = document.getElementById('hudTimer');
+      const controlsBar = document.getElementById('controlsBar');
+      const btnAutoRotate = document.getElementById('btnAutoRotate');
+      const btnSound = document.getElementById('btnSound');
+      const btnRestart = document.getElementById('btnRestart');
+      const btnHideObs = document.getElementById('btnHideObs');
+      const btnShowObs = document.getElementById('btnShowObs');
+      const soundPrompt = document.getElementById('soundPrompt');
+      const ctaToast = document.getElementById('ctaToast');
+      const ctaIcon = document.getElementById('ctaIcon');
+      const ctaLabel = document.getElementById('ctaLabel');
+      const modeButtons = Array.from(document.querySelectorAll('[data-mode]'));
+
+      // --- Lush Multi-Voice Ambient Web Audio Synthesizer ---
+      // 4-chord progressions (frequencies in Hz across 2.5 octaves) for continuous variety
+      const CHORD_PROGRESSIONS = {
+        dreamy: [
+          [130.81, 196.00, 246.94, 261.63, 329.63, 392.00, 493.88, 523.25, 659.25, 783.99], // Cmaj9
+          [110.00, 164.81, 220.00, 261.63, 329.63, 392.00, 440.00, 523.25, 659.25, 783.99], // Am9
+          [174.61, 220.00, 261.63, 329.63, 349.23, 440.00, 523.25, 659.25, 698.46, 880.00], // Fmaj7
+          [146.83, 196.00, 246.94, 293.66, 392.00, 440.00, 493.88, 587.33, 783.99, 880.00]  // G6
+        ],
+        chill: [
+          [146.83, 220.00, 261.63, 293.66, 349.23, 440.00, 523.25, 587.33, 698.46, 880.00], // Dm9
+          [116.54, 174.61, 220.00, 261.63, 293.66, 349.23, 440.00, 523.25, 587.33, 698.46], // Bbmaj9
+          [130.81, 196.00, 246.94, 293.66, 329.63, 392.00, 493.88, 587.33, 659.25, 783.99], // C6/9
+          [110.00, 164.81, 220.00, 261.63, 329.63, 392.00, 440.00, 523.25, 659.25, 783.99]  // Am7
+        ],
+        zen: [
+          [130.81, 196.00, 261.63, 293.66, 311.13, 392.00, 415.30, 523.25, 622.25, 783.99], // C Hirajoshi
+          [103.83, 155.56, 207.65, 261.63, 311.13, 392.00, 415.30, 523.25, 622.25, 783.99], // Abmaj7
+          [116.54, 174.61, 233.08, 261.63, 293.66, 349.23, 466.16, 523.25, 587.33, 698.46], // Bb6
+          [130.81, 196.00, 261.63, 293.66, 349.23, 392.00, 523.25, 587.33, 698.46, 783.99]  // Csus4
+        ]
+      };
+
+      const MODE_PROGRESSIONS = {
+        rings: CHORD_PROGRESSIONS.dreamy,
+        multiply: CHORD_PROGRESSIONS.chill,
+        duel: CHORD_PROGRESSIONS.zen,
+        growth: CHORD_PROGRESSIONS.dreamy,
+        pendulum: CHORD_PROGRESSIONS.chill,
+        plinko: CHORD_PROGRESSIONS.dreamy,
+        orbit: CHORD_PROGRESSIONS.zen,
+        spiral: CHORD_PROGRESSIONS.chill,
+        territory: CHORD_PROGRESSIONS.zen,
+        breakout: CHORD_PROGRESSIONS.dreamy
+      };
+
+      const VOICE_TIMBRES = ['kalimba', 'felt', 'glass', 'warmPad'];
+
+      let audioCtx = null;
+      let masterGain = null;
+      let dryGain = null;
+      let wetInput = null;
+      let soundEnabled = false;
+      let lastNoteTime = 0;
+      let melodicWalkIdx = 4;
+      let chordIndex = 0;
+      let noteCounter = 0;
+
+      function ensureAudio() {
+        if (!audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContextClass) return false;
+          audioCtx = new AudioContextClass();
+
+          // Soft limiter + warm low-pass filter so rapid hits never sound harsh
+          const compressor = audioCtx.createDynamicsCompressor();
+          compressor.threshold.value = -18;
+          compressor.knee.value = 18;
+          compressor.ratio.value = 4;
+          compressor.attack.value = 0.01;
+          compressor.release.value = 0.25;
+
+          const masterFilter = audioCtx.createBiquadFilter();
+          masterFilter.type = 'lowpass';
+          masterFilter.frequency.value = 2100;
+          masterFilter.Q.value = 0.6;
+
+          masterGain = audioCtx.createGain();
+          masterGain.gain.value = 0.55;
+
+          dryGain = audioCtx.createGain();
+          dryGain.gain.value = 0.72;
+
+          // Lush ambient echo loop
+          const delay = audioCtx.createDelay(1.0);
+          delay.delayTime.value = 0.27;
+          const feedback = audioCtx.createGain();
+          feedback.gain.value = 0.34;
+          const delayFilter = audioCtx.createBiquadFilter();
+          delayFilter.type = 'lowpass';
+          delayFilter.frequency.value = 1350;
+          const wetGain = audioCtx.createGain();
+          wetGain.gain.value = 0.36;
+
+          wetInput = audioCtx.createGain();
+          wetInput.gain.value = 1.0;
+
+          wetInput.connect(delay);
+          delay.connect(delayFilter);
+          delayFilter.connect(feedback);
+          feedback.connect(delay);
+          delayFilter.connect(wetGain);
+
+          dryGain.connect(masterFilter);
+          wetGain.connect(masterFilter);
+          masterFilter.connect(compressor);
+          compressor.connect(masterGain);
+          masterGain.connect(audioCtx.destination);
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        return true;
+      }
+
+      function setSound(enabled, playFeedback = true) {
+        if (enabled) {
+          if (!ensureAudio()) return;
+          soundEnabled = true;
+          btnSound.textContent = 'Звук: ВКЛ';
+          btnSound.classList.add('sound-on');
+          if (audioCtx && audioCtx.state === 'running') {
+            soundPrompt.classList.add('hidden');
+            if (playFeedback) playChime(5, 0.11);
+          }
+        } else {
+          soundEnabled = false;
+          btnSound.textContent = 'Звук: ВЫКЛ';
+          btnSound.classList.remove('sound-on');
+        }
+      }
+
+      function playSoftTone(freq, volume, timbre, duration = 0.55) {
+        if (!soundEnabled || !audioCtx || !dryGain || !wetInput) return;
+        const now = audioCtx.currentTime;
+
+        const osc1 = audioCtx.createOscillator();
+        const osc2 = audioCtx.createOscillator();
+        const voiceFilter = audioCtx.createBiquadFilter();
+        const env = audioCtx.createGain();
+
+        voiceFilter.type = 'lowpass';
+
+        if (timbre === 'kalimba') {
+          osc1.type = 'sine';
+          osc1.frequency.setValueAtTime(freq, now);
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(freq * 2, now);
+          voiceFilter.frequency.setValueAtTime(1900, now);
+        } else if (timbre === 'felt') {
+          osc1.type = 'triangle';
+          osc1.frequency.setValueAtTime(freq, now);
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(freq * 0.5, now);
+          voiceFilter.frequency.setValueAtTime(950, now);
+        } else if (timbre === 'glass') {
+          osc1.type = 'sine';
+          osc1.frequency.setValueAtTime(freq, now);
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(freq * 3, now);
+          voiceFilter.frequency.setValueAtTime(2200, now);
+        } else {
+          // warmPad
+          osc1.type = 'sine';
+          osc1.frequency.setValueAtTime(freq, now);
+          osc2.type = 'triangle';
+          osc2.frequency.setValueAtTime(freq * 1.003, now);
+          voiceFilter.frequency.setValueAtTime(1250, now);
+        }
+
+        const subGain = audioCtx.createGain();
+        subGain.gain.value = timbre === 'felt' ? 0.25 : 0.1;
+
+        const attack = timbre === 'warmPad' ? 0.055 : 0.018;
+        env.gain.setValueAtTime(0.0001, now);
+        env.gain.linearRampToValueAtTime(Math.max(0.01, volume), now + attack);
+        env.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+        osc1.connect(voiceFilter);
+        osc2.connect(subGain);
+        subGain.connect(voiceFilter);
+        voiceFilter.connect(env);
+
+        env.connect(dryGain);
+        env.connect(wetInput);
+
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + duration + 0.04);
+        osc2.stop(now + duration + 0.04);
+      }
+
+      // Melodic random-walk across rotating chords & soft timbres
+      function playChime(index, volume = 0.09) {
+        if (!soundEnabled || !audioCtx || !dryGain) return;
+        const now = audioCtx.currentTime;
+        if (now - lastNoteTime < 0.042) return;
+        lastNoteTime = now;
+
+        noteCounter++;
+        // Advance chord every 14 hits for natural musical movement
+        if (noteCounter % 14 === 0) {
+          chordIndex = (chordIndex + 1) % 4;
+        }
+
+        const prog = MODE_PROGRESSIONS[currentMode] || CHORD_PROGRESSIONS.dreamy;
+        const chord = prog[chordIndex % prog.length];
+
+        // Gentle melodic walk instead of linear loop
+        const stepDelta = [-2, -1, 1, 1, 2][Math.floor(Math.random() * 5)];
+        melodicWalkIdx = Math.max(1, Math.min(chord.length - 1, melodicWalkIdx + stepDelta));
+        const pickedIdx = (index % 3 === 0) ? ((index + melodicWalkIdx) % chord.length) : melodicWalkIdx;
+        const freq = chord[pickedIdx];
+
+        const timbre = VOICE_TIMBRES[(roundNumber + Math.floor(noteCounter / 8)) % VOICE_TIMBRES.length];
+        const dur = 0.42 + Math.random() * 0.28;
+        playSoftTone(freq, volume * (0.85 + Math.random() * 0.3), timbre, dur);
+
+        // Every 6th note, add a gentle warm bass root an octave below
+        if (noteCounter % 6 === 0) {
+          playSoftTone(chord[0], volume * 0.7, 'felt', 0.85);
+        }
+      }
+
+      function playBreakSound() {
+        if (!soundEnabled || !audioCtx || !dryGain) return;
+        const prog = MODE_PROGRESSIONS[currentMode] || CHORD_PROGRESSIONS.dreamy;
+        const chord = prog[chordIndex % prog.length];
+
+        // Warm dreamy harp arpeggio instead of harsh zap
+        [chord[0], chord[2], chord[4], chord[6], chord[8]].forEach((freq, i) => {
+          setTimeout(() => {
+            if (soundEnabled) playSoftTone(freq, 0.095, 'glass', 0.95);
+          }, i * 55);
+        });
+      }
+
+      // --- Canvas & Effects ---
+      let width = 800;
+      let height = 600;
+      let dpr = 1;
+      let minDim = 600;
+      let shakeTime = 0;
+      let shakeAmp = 0;
+
+      function triggerShake(amp = 5, duration = 0.14) {
+        shakeAmp = Math.max(shakeAmp, amp);
+        shakeTime = Math.max(shakeTime, duration);
+      }
+
+      const PALETTES = [
+        ['#38bdf8', '#818cf8', '#c084fc', '#f472b6', '#fb7185', '#fbbf24', '#34d399'],
+        ['#22d3ee', '#06b6d4', '#3b82f6', '#6366f1', '#a855f7', '#ec4899', '#f43f5e'],
+        ['#fde047', '#facc15', '#fb923c', '#f87171', '#e879f9', '#38bdf8', '#4ade80']
+      ];
+
+      let particles = [];
+      let shockwaves = [];
+
+      function spawnParticles(x, y, color, count = 20, speedScale = 1) {
+        for (let i = 0; i < count; i++) {
+          const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.45;
+          const speed = (80 + Math.random() * 230) * speedScale;
+          particles.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 1,
+            decay: 1.1 + Math.random() * 0.9,
+            size: 2 + Math.random() * 3.5,
+            color
+          });
+        }
+        if (particles.length > 520) particles.splice(0, particles.length - 520);
+      }
+
+      function spawnShockwave(x, y, color, maxRadius) {
+        shockwaves.push({
+          x, y,
+          r: 6,
+          maxR: maxRadius || minDim * 0.25,
+          color,
+          life: 1
+        });
+        if (shockwaves.length > 24) shockwaves.shift();
+      }
+
+      function updateAndDrawEffects(dt) {
+        for (let i = shockwaves.length - 1; i >= 0; i--) {
+          const sw = shockwaves[i];
+          sw.r += (sw.maxR - sw.r) * Math.min(1, dt * 8);
+          sw.life -= dt * 2.4;
+          if (sw.life <= 0) {
+            shockwaves.splice(i, 1);
+            continue;
+          }
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, sw.life * 0.55);
+          ctx.strokeStyle = sw.color;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.vx *= 0.985;
+          p.vy *= 0.985;
+          p.life -= p.decay * dt;
+          if (p.life <= 0) {
+            particles.splice(i, 1);
+            continue;
+          }
+          ctx.globalAlpha = Math.max(0, p.life);
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      function normalizeAngle(a) {
+        const twoPi = Math.PI * 2;
+        return ((a % twoPi) + twoPi) % twoPi;
+      }
+
+      function angleInGap(angle, gapStart, gapSize) {
+        const a = normalizeAngle(angle);
+        const start = normalizeAngle(gapStart);
+        const end = normalizeAngle(gapStart + gapSize);
+        return start < end ? (a >= start && a <= end) : (a >= start || a <= end);
+      }
+
+      // --- 10 Modes Configuration ---
+      const MODE_ORDER = [
+        'rings', 'multiply', 'duel', 'growth', 'pendulum',
+        'plinko', 'orbit', 'spiral', 'territory', 'breakout'
+      ];
+
+      const MODE_NAMES = {
+        rings: '1. Прорыв колец',
+        multiply: '2. Лазер-x2',
+        duel: '3. Арена 3-х шаров',
+        growth: '4. Растущий шар',
+        pendulum: '5. Гипно-маятники',
+        plinko: '6. Неон Плинко',
+        orbit: '7. Гравитация орбит',
+        spiral: '8. Спиральный лабиринт',
+        territory: '9. Захват территории',
+        breakout: '10. Арканоид-шторм'
+      };
+
+      const ROUND_MAX_SECONDS = 45;
+      let currentMode = 'rings';
+      let autoRotate = true;
+      let roundNumber = 1;
+      let roundTimeLeft = ROUND_MAX_SECONDS;
+      let roundEndTimer = 0;
+      let noteStep = 0;
+
+      // State containers
+      let state = null;
+
+      // 1. RINGS
+      function setupRings() {
+        const cx = width / 2, cy = height / 2;
+        const maxR = minDim * 0.42;
+        const count = 7;
+        const palette = PALETTES[roundNumber % PALETTES.length];
+        const rings = [];
+        for (let i = 0; i < count; i++) {
+          rings.push({
+            radius: maxR * (0.28 + (i / (count - 1)) * 0.72),
+            angle: (i * 1.1) % (Math.PI * 2),
+            speed: (i % 2 === 0 ? 1 : -1) * (0.9 + i * 0.15),
+            gapSize: 0.76 - i * 0.03,
+            color: palette[i % palette.length],
+            alive: true
+          });
+        }
+        const a = Math.random() * Math.PI * 2;
+        const spd = minDim * 0.46;
+        state = {
+          cx, cy, rings,
+          ball: { x: cx, y: cy, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r: Math.max(7, minDim * 0.017), trail: [], color: '#ffffff' },
+          gravity: minDim * 0.42
+        };
+      }
+
+      function updateRings(dt) {
+        const s = state, b = s.ball;
+        b.vy += s.gravity * dt;
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        b.trail.push({ x: b.x, y: b.y });
+        if (b.trail.length > 22) b.trail.shift();
+
+        for (const ring of s.rings) {
+          if (ring.alive) ring.angle = normalizeAngle(ring.angle + ring.speed * dt);
+        }
+
+        const dx = b.x - s.cx, dy = b.y - s.cy;
+        const dist = Math.hypot(dx, dy) || 0.0001;
+        const ballAngle = Math.atan2(dy, dx);
+
+        for (const ring of s.rings) {
+          if (!ring.alive) continue;
+          if (dist + b.r >= ring.radius - 3) {
+            if (angleInGap(ballAngle, ring.angle, ring.gapSize) && dist > ring.radius - b.r) {
+              ring.alive = false;
+              playBreakSound();
+              triggerShake(6, 0.16);
+              spawnShockwave(s.cx, s.cy, ring.color, ring.radius * 1.25);
+              for (let k = 0; k < 12; k++) {
+                const pa = (Math.PI * 2 * k) / 12;
+                spawnParticles(s.cx + Math.cos(pa) * ring.radius, s.cy + Math.sin(pa) * ring.radius, ring.color, 5, 0.85);
+              }
+              b.color = ring.color;
+              break;
+            } else if (dist + b.r >= ring.radius) {
+              const nx = dx / dist, ny = dy / dist;
+              const overlap = dist + b.r - ring.radius;
+              b.x -= nx * overlap;
+              b.y -= ny * overlap;
+              const dot = b.vx * nx + b.vy * ny;
+              if (dot > 0) {
+                b.vx = (b.vx - 2 * dot * nx) * 1.022 + (-ny) * (Math.random() - 0.5) * minDim * 0.08;
+                b.vy = (b.vy - 2 * dot * ny) * 1.022 + (nx) * (Math.random() - 0.5) * minDim * 0.08;
+                const v = Math.hypot(b.vx, b.vy), maxV = minDim * 1.05;
+                if (v > maxV) { b.vx = (b.vx / v) * maxV; b.vy = (b.vy / v) * maxV; }
+                noteStep++;
+                playChime(noteStep, 0.1, 'sine');
+                spawnParticles(s.cx + nx * ring.radius, s.cy + ny * ring.radius, ring.color, 6, 0.55);
+              }
+              break;
+            }
+          }
+          break;
+        }
+
+        const rem = s.rings.filter(r => r.alive).length;
+        hudStat.textContent = `Колец: ${rem}`;
+        if (rem === 0 && roundEndTimer <= 0) {
+          roundEndTimer = 1.4;
+          spawnParticles(s.cx, s.cy, '#38bdf8', 55, 1.4);
+          playBreakSound();
+        }
+      }
+
+      function drawRings() {
+        const s = state, b = s.ball;
+        for (const ring of s.rings) {
+          if (!ring.alive) continue;
+          ctx.save();
+          ctx.strokeStyle = ring.color;
+          ctx.lineWidth = Math.max(4, minDim * 0.011);
+          ctx.lineCap = 'round';
+          ctx.shadowColor = ring.color;
+          ctx.shadowBlur = 14;
+          ctx.beginPath();
+          ctx.arc(s.cx, s.cy, ring.radius, ring.angle + ring.gapSize, ring.angle + Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+        for (let i = 0; i < b.trail.length; i++) {
+          const t = b.trail[i], a = (i + 1) / b.trail.length;
+          ctx.globalAlpha = a * 0.35;
+          ctx.fillStyle = b.color;
+          ctx.beginPath();
+          ctx.arc(t.x, t.y, b.r * a, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = b.color;
+        ctx.shadowBlur = 18;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // 2. MULTIPLY
+      function setupMultiply() {
+        const cx = width / 2, cy = height / 2, arenaR = minDim * 0.41;
+        const palette = PALETTES[(roundNumber + 1) % PALETTES.length];
+        state = {
+          cx, cy, arenaR, gateAngle: 0, gateSpeed: 1.1, maxBalls: 96,
+          balls: [{ x: cx - arenaR * 0.15, y: cy - arenaR * 0.3, vx: minDim * 0.28, vy: 0, r: Math.max(5.5, minDim * 0.013), color: palette[0], cooldown: 0 }],
+          palette, gravity: minDim * 0.55
+        };
+      }
+
+      function updateMultiply(dt) {
+        const s = state;
+        s.gateAngle += s.gateSpeed * dt;
+        const gx1 = s.cx + Math.cos(s.gateAngle) * (s.arenaR * 0.68);
+        const gy1 = s.cy + Math.sin(s.gateAngle) * (s.arenaR * 0.68);
+        const gx2 = s.cx - Math.cos(s.gateAngle) * (s.arenaR * 0.68);
+        const gy2 = s.cy - Math.sin(s.gateAngle) * (s.arenaR * 0.68);
+        const newBalls = [];
+
+        for (const b of s.balls) {
+          b.vy += s.gravity * dt;
+          b.x += b.vx * dt;
+          b.y += b.vy * dt;
+          if (b.cooldown > 0) b.cooldown -= dt;
+
+          const dx = b.x - s.cx, dy = b.y - s.cy;
+          const dist = Math.hypot(dx, dy) || 0.0001;
+          if (dist + b.r > s.arenaR) {
+            const nx = dx / dist, ny = dy / dist;
+            b.x = s.cx + nx * (s.arenaR - b.r);
+            b.y = s.cy + ny * (s.arenaR - b.r);
+            const dot = b.vx * nx + b.vy * ny;
+            if (dot > 0) {
+              b.vx = (b.vx - 2 * dot * nx) * 0.99;
+              b.vy = (b.vy - 2 * dot * ny) * 0.99;
+              noteStep++;
+              playChime(noteStep, 0.055, 'sine');
+            }
+          }
+
+          if (b.cooldown <= 0 && s.balls.length + newBalls.length < s.maxBalls) {
+            const len = Math.hypot(gx2 - gx1, gy2 - gy1) || 1;
+            const t = ((b.x - gx1) * (gx2 - gx1) + (b.y - gy1) * (gy2 - gy1)) / (len * len);
+            if (t >= 0 && t <= 1) {
+              const px = gx1 + t * (gx2 - gx1), py = gy1 + t * (gy2 - gy1);
+              if (Math.hypot(b.x - px, b.y - py) < b.r + 5) {
+                b.cooldown = 0.65;
+                const col = s.palette[(s.balls.length + newBalls.length) % s.palette.length];
+                newBalls.push({
+                  x: b.x, y: b.y,
+                  vx: -b.vx + (Math.random() - 0.5) * minDim * 0.16,
+                  vy: b.vy * 0.92 - minDim * 0.08,
+                  r: b.r, color: col, cooldown: 0.65
+                });
+                noteStep += 2;
+                playChime(noteStep, 0.085, 'triangle');
+                spawnParticles(b.x, b.y, col, 5, 0.5);
+              }
+            }
+          }
+        }
+        if (newBalls.length > 0) s.balls.push(...newBalls);
+        hudStat.textContent = `Шаров: ${s.balls.length} / ${s.maxBalls}`;
+        if (s.balls.length >= s.maxBalls && roundEndTimer <= 0) {
+          roundEndTimer = 1.5;
+          triggerShake(7, 0.2);
+          spawnShockwave(s.cx, s.cy, '#f472b6', s.arenaR * 1.2);
+          spawnParticles(s.cx, s.cy, '#f472b6', 60, 1.4);
+          playBreakSound();
+        }
+      }
+
+      function drawMultiply() {
+        const s = state;
+        ctx.save();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = Math.max(4, minDim * 0.011);
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        ctx.arc(s.cx, s.cy, s.arenaR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        const gx1 = s.cx + Math.cos(s.gateAngle) * (s.arenaR * 0.68);
+        const gy1 = s.cy + Math.sin(s.gateAngle) * (s.arenaR * 0.68);
+        const gx2 = s.cx - Math.cos(s.gateAngle) * (s.arenaR * 0.68);
+        const gy2 = s.cy - Math.sin(s.gateAngle) * (s.arenaR * 0.68);
+        ctx.save();
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 4;
+        ctx.shadowColor = '#fbbf24';
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.moveTo(gx1, gy1);
+        ctx.lineTo(gx2, gy2);
+        ctx.stroke();
+        ctx.restore();
+
+        for (const b of s.balls) {
+          ctx.fillStyle = b.color;
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // 3. DUEL
+      function setupDuel() {
+        const boxSize = minDim * 0.78;
+        const left = (width - boxSize) / 2, top = (height - boxSize) / 2;
+        const cols = 10, rows = 10, cellW = boxSize / cols, cellH = boxSize / rows;
+        const teams = [
+          { color: '#38bdf8', score: 0 },
+          { color: '#f472b6', score: 0 },
+          { color: '#fbbf24', score: 0 }
+        ];
+        const blocks = [];
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            if (r >= 4 && r <= 5 && c >= 4 && c <= 5) continue;
+            blocks.push({ x: left + c * cellW + 2, y: top + r * cellH + 2, w: cellW - 4, h: cellH - 4, hp: 1 });
+          }
+        }
+        const spd = minDim * 0.44;
+        const balls = teams.map((t, idx) => {
+          const a = (Math.PI * 2 * idx) / 3 + 0.4;
+          return {
+            team: idx, color: t.color,
+            x: width / 2 + Math.cos(a) * (boxSize * 0.08),
+            y: height / 2 + Math.sin(a) * (boxSize * 0.08),
+            vx: Math.cos(a + 0.8) * spd, vy: Math.sin(a + 0.8) * spd,
+            r: Math.max(7, minDim * 0.016)
+          };
+        });
+        state = { left, top, boxSize, teams, blocks, balls };
+      }
+
+      function updateDuel(dt) {
+        const s = state;
+        for (const b of s.balls) {
+          b.x += b.vx * dt;
+          b.y += b.vy * dt;
+          if (b.x - b.r < s.left) { b.x = s.left + b.r; b.vx = Math.abs(b.vx); playChime(++noteStep, 0.05, 'sine'); }
+          else if (b.x + b.r > s.left + s.boxSize) { b.x = s.left + s.boxSize - b.r; b.vx = -Math.abs(b.vx); playChime(++noteStep, 0.05, 'sine'); }
+          if (b.y - b.r < s.top) { b.y = s.top + b.r; b.vy = Math.abs(b.vy); playChime(++noteStep, 0.05, 'sine'); }
+          else if (b.y + b.r > s.top + s.boxSize) { b.y = s.top + s.boxSize - b.r; b.vy = -Math.abs(b.vy); playChime(++noteStep, 0.05, 'sine'); }
+
+          for (const blk of s.blocks) {
+            if (blk.hp <= 0) continue;
+            const cx = Math.max(blk.x, Math.min(b.x, blk.x + blk.w));
+            const cy = Math.max(blk.y, Math.min(b.y, blk.y + blk.h));
+            const dx = b.x - cx, dy = b.y - cy;
+            if (dx * dx + dy * dy <= b.r * b.r) {
+              blk.hp = 0;
+              s.teams[b.team].score++;
+              if (Math.abs(dx) > Math.abs(dy)) b.vx = -b.vx; else b.vy = -b.vy;
+              playChime(++noteStep + b.team * 2, 0.08, 'triangle');
+              spawnParticles(blk.x + blk.w / 2, blk.y + blk.h / 2, b.color, 6, 0.65);
+              break;
+            }
+          }
+        }
+        const rem = s.blocks.filter(k => k.hp > 0).length;
+        hudStat.textContent = `${s.teams.map(t => t.score).join(' : ')} • Блоков: ${rem}`;
+        if (rem === 0 && roundEndTimer <= 0) {
+          roundEndTimer = 1.5;
+          const winner = [...s.teams].sort((a, b) => b.score - a.score)[0];
+          spawnParticles(width / 2, height / 2, winner.color, 60, 1.4);
+          playBreakSound();
+        }
+      }
+
+      function drawDuel() {
+        const s = state;
+        ctx.strokeStyle = 'rgba(255,255,255,0.24)';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(s.left, s.top, s.boxSize, s.boxSize);
+        for (const blk of s.blocks) {
+          if (blk.hp <= 0) continue;
+          ctx.fillStyle = 'rgba(148,163,184,0.24)';
+          ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+          ctx.lineWidth = 1;
+          ctx.fillRect(blk.x, blk.y, blk.w, blk.h);
+          ctx.strokeRect(blk.x, blk.y, blk.w, blk.h);
+        }
+        for (const b of s.balls) {
+          ctx.save();
+          ctx.fillStyle = b.color;
+          ctx.shadowColor = b.color;
+          ctx.shadowBlur = 16;
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      // 4. GROWTH (Growing ball inside pulsing arena)
+      function setupGrowth() {
+        const cx = width / 2, cy = height / 2;
+        const arenaR = minDim * 0.41;
+        const a = Math.random() * Math.PI * 2;
+        const spd = minDim * 0.45;
+        state = {
+          cx, cy, arenaR,
+          ball: { x: cx, y: cy - arenaR * 0.25, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r: minDim * 0.025, trail: [] },
+          gravity: minDim * 0.5,
+          hue: 190
+        };
+      }
+
+      function updateGrowth(dt) {
+        const s = state, b = s.ball;
+        b.vy += s.gravity * dt;
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        b.trail.push({ x: b.x, y: b.y, r: b.r });
+        if (b.trail.length > 16) b.trail.shift();
+
+        const dx = b.x - s.cx, dy = b.y - s.cy;
+        const dist = Math.hypot(dx, dy) || 0.0001;
+        if (dist + b.r >= s.arenaR) {
+          const nx = dx / dist, ny = dy / dist;
+          b.x = s.cx + nx * (s.arenaR - b.r);
+          b.y = s.cy + ny * (s.arenaR - b.r);
+          const dot = b.vx * nx + b.vy * ny;
+          if (dot > 0) {
+            b.vx = (b.vx - 2 * dot * nx) * 1.015 + (-ny) * (Math.random() - 0.5) * minDim * 0.06;
+            b.vy = (b.vy - 2 * dot * ny) * 1.015 + (nx) * (Math.random() - 0.5) * minDim * 0.06;
+            b.r += minDim * 0.0075;
+            s.hue = (s.hue + 14) % 360;
+            const col = `hsl(${s.hue}, 92%, 62%)`;
+            playChime(++noteStep, 0.1, 'triangle');
+            spawnParticles(s.cx + nx * s.arenaR, s.cy + ny * s.arenaR, col, 8, 0.7);
+            spawnShockwave(s.cx + nx * s.arenaR, s.cy + ny * s.arenaR, col, minDim * 0.14);
+          }
+        }
+
+        const pct = Math.min(100, Math.round((b.r / (s.arenaR * 0.88)) * 100));
+        hudStat.textContent = `Размер: ${pct}%`;
+        if (b.r >= s.arenaR * 0.88 && roundEndTimer <= 0) {
+          roundEndTimer = 1.5;
+          triggerShake(9, 0.25);
+          spawnShockwave(s.cx, s.cy, `hsl(${s.hue}, 95%, 65%)`, s.arenaR * 1.4);
+          spawnParticles(s.cx, s.cy, `hsl(${s.hue}, 95%, 65%)`, 70, 1.6);
+          playBreakSound();
+        }
+      }
+
+      function drawGrowth() {
+        const s = state, b = s.ball;
+        const col = `hsl(${s.hue}, 92%, 62%)`;
+        ctx.save();
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 4;
+        ctx.shadowColor = col;
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        ctx.arc(s.cx, s.cy, s.arenaR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        for (let i = 0; i < b.trail.length; i++) {
+          const t = b.trail[i], a = (i + 1) / b.trail.length;
+          ctx.globalAlpha = a * 0.24;
+          ctx.fillStyle = col;
+          ctx.beginPath();
+          ctx.arc(t.x, t.y, t.r * 0.9, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        ctx.save();
+        ctx.fillStyle = col;
+        ctx.shadowColor = col;
+        ctx.shadowBlur = 22;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // 5. PENDULUM (Polyrhythmic wave pendulums)
+      function setupPendulum() {
+        const count = 12;
+        const cx = width / 2;
+        const topY = height * 0.16;
+        const maxLen = Math.min(height * 0.72, width * 0.72);
+        const palette = PALETTES[roundNumber % PALETTES.length];
+        const items = [];
+        for (let i = 0; i < count; i++) {
+          items.push({
+            len: maxLen * (0.28 + (i / (count - 1)) * 0.72),
+            freq: 0.9 + i * 0.08,
+            phase: 0,
+            prevSin: 0,
+            color: palette[i % palette.length],
+            flash: 0
+          });
+        }
+        state = { cx, topY, items, t: 0, maxAmp: 0.72, beats: 0 };
+      }
+
+      function updatePendulum(dt) {
+        const s = state;
+        s.t += dt;
+        for (let i = 0; i < s.items.length; i++) {
+          const p = s.items[i];
+          const curSin = Math.sin(s.t * p.freq * 2.1);
+          if ((p.prevSin < 0 && curSin >= 0) || (p.prevSin > 0 && curSin <= 0)) {
+            p.flash = 1;
+            s.beats++;
+            playChime(i, 0.075, 'sine');
+          }
+          p.prevSin = curSin;
+          p.phase = curSin * s.maxAmp;
+          if (p.flash > 0) p.flash = Math.max(0, p.flash - dt * 3);
+        }
+        hudStat.textContent = `Полиритм • Нот: ${s.beats}`;
+      }
+
+      function drawPendulum() {
+        const s = state;
+        // Center trigger line
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(s.cx, s.topY);
+        ctx.lineTo(s.cx, s.topY + s.items[s.items.length - 1].len);
+        ctx.stroke();
+
+        const points = [];
+        for (const p of s.items) {
+          const x = s.cx + Math.sin(p.phase) * p.len;
+          const y = s.topY + Math.cos(p.phase) * p.len;
+          points.push({ x, y, color: p.color, flash: p.flash });
+
+          ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(s.cx, s.topY);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+        }
+
+        // Connecting glowing wave spline
+        ctx.save();
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        points.forEach((pt, idx) => idx === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+        ctx.stroke();
+        ctx.restore();
+
+        for (const pt of points) {
+          ctx.save();
+          ctx.fillStyle = pt.flash > 0.2 ? '#ffffff' : pt.color;
+          ctx.shadowColor = pt.color;
+          ctx.shadowBlur = 12 + pt.flash * 16;
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, Math.max(7, minDim * 0.017) + pt.flash * 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      // 6. PLINKO
+      function setupPlinko() {
+        const rows = 9;
+        const boardW = minDim * 0.82;
+        const boardH = minDim * 0.74;
+        const left = (width - boardW) / 2;
+        const top = (height - boardH) / 2;
+        const pins = [];
+        for (let r = 0; r < rows; r++) {
+          const cols = r + 3;
+          const y = top + (r + 1) * (boardH * 0.78 / rows);
+          const span = (cols - 1) * (boardW / (rows + 2));
+          const startX = width / 2 - span / 2;
+          for (let c = 0; c < cols; c++) {
+            pins.push({ x: startX + c * (boardW / (rows + 2)), y, r: Math.max(3.5, minDim * 0.008), flash: 0 });
+          }
+        }
+        const bins = new Array(8).fill(0);
+        state = {
+          left, top, boardW, boardH, pins, bins,
+          balls: [], spawnTimer: 0, totalDropped: 0,
+          gravity: minDim * 0.75,
+          palette: PALETTES[roundNumber % PALETTES.length]
+        };
+      }
+
+      function updatePlinko(dt) {
+        const s = state;
+        s.spawnTimer -= dt;
+        if (s.spawnTimer <= 0 && s.balls.length < 45) {
+          s.spawnTimer = 0.38;
+          s.totalDropped++;
+          s.balls.push({
+            x: width / 2 + (Math.random() - 0.5) * minDim * 0.05,
+            y: s.top + 8,
+            vx: (Math.random() - 0.5) * 40,
+            vy: 20,
+            r: Math.max(5.5, minDim * 0.013),
+            color: s.palette[s.totalDropped % s.palette.length]
+          });
+        }
+
+        for (const pin of s.pins) {
+          if (pin.flash > 0) pin.flash = Math.max(0, pin.flash - dt * 4);
+        }
+
+        for (let i = s.balls.length - 1; i >= 0; i--) {
+          const b = s.balls[i];
+          b.vy += s.gravity * dt;
+          b.x += b.vx * dt;
+          b.y += b.vy * dt;
+
+          if (b.x - b.r < s.left) { b.x = s.left + b.r; b.vx = Math.abs(b.vx) * 0.7; }
+          if (b.x + b.r > s.left + s.boardW) { b.x = s.left + s.boardW - b.r; b.vx = -Math.abs(b.vx) * 0.7; }
+
+          for (const pin of s.pins) {
+            const dx = b.x - pin.x, dy = b.y - pin.y;
+            const dist = Math.hypot(dx, dy);
+            const minD = b.r + pin.r;
+            if (dist < minD && dist > 0.0001) {
+              const nx = dx / dist, ny = dy / dist;
+              b.x = pin.x + nx * minD;
+              b.y = pin.y + ny * minD;
+              const dot = b.vx * nx + b.vy * ny;
+              if (dot < 0) {
+                b.vx = (b.vx - 2 * dot * nx) * 0.72 + (Math.random() - 0.5) * 28;
+                b.vy = (b.vy - 2 * dot * ny) * 0.72;
+                pin.flash = 1;
+                playChime(++noteStep, 0.055, 'sine');
+              }
+            }
+          }
+
+          if (b.y > s.top + s.boardH * 0.92) {
+            const binIdx = Math.max(0, Math.min(s.bins.length - 1, Math.floor(((b.x - s.left) / s.boardW) * s.bins.length)));
+            s.bins[binIdx]++;
+            spawnParticles(b.x, b.y, b.color, 6, 0.5);
+            s.balls.splice(i, 1);
+          }
+        }
+        hudStat.textContent = `Сброшено шаров: ${s.totalDropped}`;
+      }
+
+      function drawPlinko() {
+        const s = state;
+        for (const pin of s.pins) {
+          ctx.save();
+          ctx.fillStyle = pin.flash > 0.1 ? '#38bdf8' : 'rgba(226, 232, 240, 0.65)';
+          if (pin.flash > 0.1) { ctx.shadowColor = '#38bdf8'; ctx.shadowBlur = 12; }
+          ctx.beginPath();
+          ctx.arc(pin.x, pin.y, pin.r + pin.flash * 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+        // Bins at bottom
+        const binW = s.boardW / s.bins.length;
+        const baseY = s.top + s.boardH;
+        for (let i = 0; i < s.bins.length; i++) {
+          const x = s.left + i * binW;
+          const fillH = Math.min(s.boardH * 0.14, s.bins[i] * 3);
+          ctx.fillStyle = 'rgba(56, 189, 248, 0.25)';
+          ctx.fillRect(x + 3, baseY - fillH, binW - 6, fillH);
+          ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+          ctx.strokeRect(x + 3, baseY - s.boardH * 0.14, binW - 6, s.boardH * 0.14);
+        }
+        for (const b of s.balls) {
+          ctx.fillStyle = b.color;
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // 7. ORBIT (Gravitational slingshot comets)
+      function setupOrbit() {
+        const cx = width / 2, cy = height / 2;
+        const palette = PALETTES[(roundNumber + 2) % PALETTES.length];
+        const comets = [];
+        for (let i = 0; i < 18; i++) {
+          const angle = (Math.PI * 2 * i) / 18;
+          const dist = minDim * (0.22 + (i % 4) * 0.06);
+          const tangSpeed = minDim * (0.32 + Math.random() * 0.14);
+          comets.push({
+            x: cx + Math.cos(angle) * dist,
+            y: cy + Math.sin(angle) * dist,
+            vx: -Math.sin(angle) * tangSpeed,
+            vy: Math.cos(angle) * tangSpeed,
+            r: Math.max(4, minDim * 0.01),
+            color: palette[i % palette.length],
+            trail: [],
+            cooldown: 0
+          });
+        }
+        state = { cx, cy, comets, starR: minDim * 0.045, pulse: 0, passes: 0 };
+      }
+
+      function updateOrbit(dt) {
+        const s = state;
+        s.pulse += dt * 4;
+        const G = minDim * minDim * 0.26;
+        for (const c of s.comets) {
+          const dx = s.cx - c.x, dy = s.cy - c.y;
+          const distSq = Math.max(minDim * minDim * 0.004, dx * dx + dy * dy);
+          const dist = Math.sqrt(distSq);
+          const force = G / distSq;
+          c.vx += (dx / dist) * force * dt;
+          c.vy += (dy / dist) * force * dt;
+
+          // Gentle speed cap
+          const spd = Math.hypot(c.vx, c.vy);
+          const maxS = minDim * 0.95;
+          if (spd > maxS) { c.vx = (c.vx / spd) * maxS; c.vy = (c.vy / spd) * maxS; }
+
+          c.x += c.vx * dt;
+          c.y += c.vy * dt;
+          c.trail.push({ x: c.x, y: c.y });
+          if (c.trail.length > 20) c.trail.shift();
+
+          if (c.cooldown > 0) c.cooldown -= dt;
+          if (dist < s.starR * 2.2 && c.cooldown <= 0) {
+            c.cooldown = 0.9;
+            s.passes++;
+            playChime(++noteStep, 0.06, 'sine');
+          }
+          // Keep inside screen
+          const maxR = minDim * 0.46;
+          if (dist > maxR) {
+            c.vx -= (dx / dist) * -minDim * 0.2 * dt;
+            c.vy -= (dy / dist) * -minDim * 0.2 * dt;
+          }
+        }
+        hudStat.textContent = `Пролётов у ядра: ${s.passes}`;
+      }
+
+      function drawOrbit() {
+        const s = state;
+        const rPulse = s.starR + Math.sin(s.pulse) * 3;
+        ctx.save();
+        ctx.fillStyle = '#fde047';
+        ctx.shadowColor = '#fbbf24';
+        ctx.shadowBlur = 28;
+        ctx.beginPath();
+        ctx.arc(s.cx, s.cy, rPulse, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        for (const c of s.comets) {
+          for (let i = 0; i < c.trail.length; i++) {
+            const t = c.trail[i], a = (i + 1) / c.trail.length;
+            ctx.globalAlpha = a * 0.38;
+            ctx.fillStyle = c.color;
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, c.r * a, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // 8. SPIRAL (Rotating spiral maze)
+      function setupSpiral() {
+        const cx = width / 2, cy = height / 2;
+        const maxR = minDim * 0.42;
+        const palette = PALETTES[roundNumber % PALETTES.length];
+        const rings = [];
+        for (let i = 0; i < 6; i++) {
+          rings.push({
+            radius: maxR * (0.24 + (i / 5) * 0.76),
+            angle: i * 0.65,
+            speed: (i % 2 === 0 ? 1 : -1) * (1.2 + i * 0.1),
+            gapSize: 0.82,
+            color: palette[i % palette.length],
+            passed: false
+          });
+        }
+        state = {
+          cx, cy, rings,
+          ball: { x: cx, y: cy - maxR * 0.92, vx: minDim * 0.2, vy: 0, r: Math.max(7, minDim * 0.016), trail: [] },
+          gravity: minDim * 0.35,
+          coreR: minDim * 0.055
+        };
+      }
+
+      function updateSpiral(dt) {
+        const s = state, b = s.ball;
+        // Pull gently toward center
+        const dxC = s.cx - b.x, dyC = s.cy - b.y;
+        const distC = Math.hypot(dxC, dyC) || 0.0001;
+        b.vx += (dxC / distC) * s.gravity * dt;
+        b.vy += (dyC / distC) * s.gravity * dt;
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        b.trail.push({ x: b.x, y: b.y });
+        if (b.trail.length > 18) b.trail.shift();
+
+        for (const ring of s.rings) {
+          ring.angle = normalizeAngle(ring.angle + ring.speed * dt);
+          if (ring.passed) continue;
+
+          const ballAngle = Math.atan2(b.y - s.cy, b.x - s.cx);
+          const diff = Math.abs(distC - ring.radius);
+          if (diff <= b.r + 3) {
+            if (angleInGap(ballAngle, ring.angle, ring.gapSize)) {
+              if (distC < ring.radius - 2) {
+                ring.passed = true;
+                playBreakSound();
+                spawnShockwave(b.x, b.y, ring.color, minDim * 0.16);
+                spawnParticles(b.x, b.y, ring.color, 15, 0.8);
+              }
+            } else {
+              const nx = (b.x - s.cx) / distC, ny = (b.y - s.cy) / distC;
+              b.x = s.cx + nx * (ring.radius + b.r + 3);
+              b.y = s.cy + ny * (ring.radius + b.r + 3);
+              const dot = b.vx * nx + b.vy * ny;
+              if (dot < 0) {
+                b.vx = (b.vx - 2 * dot * nx) * 0.96 + (-ny) * minDim * 0.08;
+                b.vy = (b.vy - 2 * dot * ny) * 0.96 + (nx) * minDim * 0.08;
+                playChime(++noteStep, 0.08, 'sine');
+              }
+            }
+          }
+        }
+
+        const passedCount = s.rings.filter(r => r.passed).length;
+        hudStat.textContent = `Пройдено слоёв: ${passedCount}/${s.rings.length}`;
+
+        if (distC < s.coreR + b.r && roundEndTimer <= 0) {
+          roundEndTimer = 1.4;
+          triggerShake(7, 0.2);
+          spawnShockwave(s.cx, s.cy, '#34d399', minDim * 0.45);
+          spawnParticles(s.cx, s.cy, '#34d399', 60, 1.5);
+          playBreakSound();
+        }
+      }
+
+      function drawSpiral() {
+        const s = state, b = s.ball;
+        ctx.save();
+        ctx.fillStyle = '#34d399';
+        ctx.shadowColor = '#34d399';
+        ctx.shadowBlur = 22;
+        ctx.beginPath();
+        ctx.arc(s.cx, s.cy, s.coreR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        for (const ring of s.rings) {
+          ctx.save();
+          ctx.globalAlpha = ring.passed ? 0.18 : 1;
+          ctx.strokeStyle = ring.color;
+          ctx.lineWidth = Math.max(4, minDim * 0.01);
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.arc(s.cx, s.cy, ring.radius, ring.angle + ring.gapSize, ring.angle + Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        for (let i = 0; i < b.trail.length; i++) {
+          const t = b.trail[i], a = (i + 1) / b.trail.length;
+          ctx.globalAlpha = a * 0.35;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(t.x, t.y, b.r * a, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 9. TERRITORY (Fire vs Ice grid battle)
+      function setupTerritory() {
+        const boxSize = minDim * 0.78;
+        const left = (width - boxSize) / 2, top = (height - boxSize) / 2;
+        const cols = 14, rows = 14;
+        const grid = [];
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            grid.push(c < cols / 2 ? 0 : 1);
+          }
+        }
+        const spd = minDim * 0.48;
+        const balls = [
+          { team: 0, color: '#38bdf8', oppColor: '#fb7185', x: left + boxSize * 0.25, y: top + boxSize * 0.35, vx: spd, vy: spd * 0.78, r: Math.max(7, minDim * 0.017) },
+          { team: 0, color: '#38bdf8', oppColor: '#fb7185', x: left + boxSize * 0.25, y: top + boxSize * 0.65, vx: spd * 0.85, vy: -spd * 0.9, r: Math.max(7, minDim * 0.017) },
+          { team: 1, color: '#fb7185', oppColor: '#38bdf8', x: left + boxSize * 0.75, y: top + boxSize * 0.35, vx: -spd, vy: spd * 0.82, r: Math.max(7, minDim * 0.017) },
+          { team: 1, color: '#fb7185', oppColor: '#38bdf8', x: left + boxSize * 0.75, y: top + boxSize * 0.65, vx: -spd * 0.88, vy: -spd * 0.76, r: Math.max(7, minDim * 0.017) }
+        ];
+        state = { left, top, boxSize, cols, rows, grid, balls };
+      }
+
+      function updateTerritory(dt) {
+        const s = state;
+        const cellW = s.boxSize / s.cols, cellH = s.boxSize / s.rows;
+        for (const b of s.balls) {
+          b.x += b.vx * dt;
+          b.y += b.vy * dt;
+          if (b.x - b.r < s.left) { b.x = s.left + b.r; b.vx = Math.abs(b.vx); }
+          if (b.x + b.r > s.left + s.boxSize) { b.x = s.left + s.boxSize - b.r; b.vx = -Math.abs(b.vx); }
+          if (b.y - b.r < s.top) { b.y = s.top + b.r; b.vy = Math.abs(b.vy); }
+          if (b.y + b.r > s.top + s.boxSize) { b.y = s.top + s.boxSize - b.r; b.vy = -Math.abs(b.vy); }
+
+          const c = Math.max(0, Math.min(s.cols - 1, Math.floor((b.x - s.left) / cellW)));
+          const r = Math.max(0, Math.min(s.rows - 1, Math.floor((b.y - s.top) / cellH)));
+          const idx = r * s.cols + c;
+          if (s.grid[idx] !== b.team) {
+            s.grid[idx] = b.team;
+            if (Math.random() < 0.5) b.vx = -b.vx; else b.vy = -b.vy;
+            playChime(++noteStep + b.team * 3, 0.065, 'sine');
+            spawnParticles(b.x, b.y, b.color, 4, 0.5);
+          }
+        }
+        const team0 = s.grid.filter(v => v === 0).length;
+        const pct0 = Math.round((team0 / s.grid.length) * 100);
+        hudStat.textContent = `Лёд ${pct0}% : ${100 - pct0}% Огонь`;
+      }
+
+      function drawTerritory() {
+        const s = state;
+        const cellW = s.boxSize / s.cols, cellH = s.boxSize / s.rows;
+        for (let r = 0; r < s.rows; r++) {
+          for (let c = 0; c < s.cols; c++) {
+            const team = s.grid[r * s.cols + c];
+            ctx.fillStyle = team === 0 ? 'rgba(56, 189, 248, 0.25)' : 'rgba(251, 113, 133, 0.25)';
+            ctx.fillRect(s.left + c * cellW + 1, s.top + r * cellH + 1, cellW - 2, cellH - 2);
+          }
+        }
+        ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(s.left, s.top, s.boxSize, s.boxSize);
+
+        for (const b of s.balls) {
+          ctx.save();
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowColor = b.color;
+          ctx.shadowBlur = 16;
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      // 10. BREAKOUT STORM
+      function setupBreakout() {
+        const boxW = minDim * 0.82, boxH = minDim * 0.78;
+        const left = (width - boxW) / 2, top = (height - boxH) / 2;
+        const cols = 10, rows = 6;
+        const cellW = boxW / cols, cellH = (boxH * 0.42) / rows;
+        const palette = PALETTES[(roundNumber + 1) % PALETTES.length];
+        const bricks = [];
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            bricks.push({
+              x: left + c * cellW + 2,
+              y: top + 16 + r * cellH + 2,
+              w: cellW - 4,
+              h: cellH - 4,
+              color: palette[r % palette.length],
+              alive: true
+            });
+          }
+        }
+        const spd = minDim * 0.5;
+        const balls = [];
+        for (let i = 0; i < 4; i++) {
+          const a = -Math.PI * 0.75 + i * 0.45;
+          balls.push({
+            x: width / 2 + (i - 1.5) * 24,
+            y: top + boxH * 0.78,
+            vx: Math.cos(a) * spd,
+            vy: Math.sin(a) * spd,
+            r: Math.max(6, minDim * 0.014),
+            color: palette[i % palette.length],
+            trail: []
+          });
+        }
+        state = { left, top, boxW, boxH, bricks, balls };
+      }
+
+      function updateBreakout(dt) {
+        const s = state;
+        for (const b of s.balls) {
+          b.x += b.vx * dt;
+          b.y += b.vy * dt;
+          b.trail.push({ x: b.x, y: b.y });
+          if (b.trail.length > 14) b.trail.shift();
+
+          if (b.x - b.r < s.left) { b.x = s.left + b.r; b.vx = Math.abs(b.vx); playChime(++noteStep, 0.05, 'sine'); }
+          if (b.x + b.r > s.left + s.boxW) { b.x = s.left + s.boxW - b.r; b.vx = -Math.abs(b.vx); playChime(++noteStep, 0.05, 'sine'); }
+          if (b.y - b.r < s.top) { b.y = s.top + b.r; b.vy = Math.abs(b.vy); playChime(++noteStep, 0.05, 'sine'); }
+          if (b.y + b.r > s.top + s.boxH) { b.y = s.top + s.boxH - b.r; b.vy = -Math.abs(b.vy); playChime(++noteStep, 0.05, 'sine'); }
+
+          for (const br of s.bricks) {
+            if (!br.alive) continue;
+            const cx = Math.max(br.x, Math.min(b.x, br.x + br.w));
+            const cy = Math.max(br.y, Math.min(b.y, br.y + br.h));
+            const dx = b.x - cx, dy = b.y - cy;
+            if (dx * dx + dy * dy <= b.r * b.r) {
+              br.alive = false;
+              if (Math.abs(dx) > Math.abs(dy)) b.vx = -b.vx; else b.vy = -b.vy;
+              playChime(++noteStep, 0.08, 'triangle');
+              spawnParticles(br.x + br.w / 2, br.y + br.h / 2, br.color, 7, 0.7);
+              break;
+            }
+          }
+        }
+        const rem = s.bricks.filter(br => br.alive).length;
+        hudStat.textContent = `Блоков: ${rem}`;
+        if (rem === 0 && roundEndTimer <= 0) {
+          roundEndTimer = 1.4;
+          triggerShake(6, 0.18);
+          spawnParticles(width / 2, height / 2, '#fbbf24', 60, 1.4);
+          playBreakSound();
+        }
+      }
+
+      function drawBreakout() {
+        const s = state;
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(s.left, s.top, s.boxW, s.boxH);
+
+        for (const br of s.bricks) {
+          if (!br.alive) continue;
+          ctx.save();
+          ctx.fillStyle = br.color;
+          ctx.shadowColor = br.color;
+          ctx.shadowBlur = 8;
+          ctx.fillRect(br.x, br.y, br.w, br.h);
+          ctx.restore();
+        }
+
+        for (const b of s.balls) {
+          for (let i = 0; i < b.trail.length; i++) {
+            const t = b.trail[i], a = (i + 1) / b.trail.length;
+            ctx.globalAlpha = a * 0.35;
+            ctx.fillStyle = b.color;
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, b.r * a, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // --- Mode Dispatcher ---
+      const MODE_HANDLERS = {
+        rings:     { setup: setupRings,     update: updateRings,     draw: drawRings },
+        multiply:  { setup: setupMultiply,  update: updateMultiply,  draw: drawMultiply },
+        duel:      { setup: setupDuel,      update: updateDuel,      draw: drawDuel },
+        growth:    { setup: setupGrowth,    update: updateGrowth,    draw: drawGrowth },
+        pendulum:  { setup: setupPendulum,  update: updatePendulum,  draw: drawPendulum },
+        plinko:    { setup: setupPlinko,    update: updatePlinko,    draw: drawPlinko },
+        orbit:     { setup: setupOrbit,     update: updateOrbit,     draw: drawOrbit },
+        spiral:    { setup: setupSpiral,    update: updateSpiral,    draw: drawSpiral },
+        territory: { setup: setupTerritory, update: updateTerritory, draw: drawTerritory },
+        breakout:  { setup: setupBreakout,  update: updateBreakout,  draw: drawBreakout }
+      };
+
+      function initMode(mode, incrementRound = false) {
+        currentMode = mode;
+        if (incrementRound) roundNumber++;
+        roundTimeLeft = ROUND_MAX_SECONDS;
+        roundEndTimer = 0;
+        particles = [];
+        shockwaves = [];
+
+        hudRound.textContent = `РАУНД #${roundNumber}`;
+        hudMode.textContent = MODE_NAMES[mode];
+        hudTimer.textContent = `${Math.ceil(roundTimeLeft)}с`;
+
+        modeButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
+        MODE_HANDLERS[mode].setup();
+      }
+
+      function nextRound() {
+        let nextMode = currentMode;
+        if (autoRotate) {
+          const idx = MODE_ORDER.indexOf(currentMode);
+          nextMode = MODE_ORDER[(idx + 1) % MODE_ORDER.length];
+        }
+        initMode(nextMode, true);
+      }
+
+      function resizeCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        width = Math.max(300, rect.width);
+        height = Math.max(300, rect.height);
+        minDim = Math.min(width, height);
+        canvas.width = Math.floor(width * dpr);
+        canvas.height = Math.floor(height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        initMode(currentMode, false);
+      }
+
+      // --- Main Loop ---
+      let lastTime = 0;
+      function frame(ts) {
+        if (!lastTime) lastTime = ts;
+        const dt = Math.min((ts - lastTime) / 1000, 0.035);
+        lastTime = ts;
+
+        ctx.save();
+        if (shakeTime > 0) {
+          shakeTime -= dt;
+          const sx = (Math.random() - 0.5) * shakeAmp * 2;
+          const sy = (Math.random() - 0.5) * shakeAmp * 2;
+          ctx.translate(sx, sy);
+          if (shakeTime <= 0) shakeAmp = 0;
+        }
+
+        ctx.fillStyle = 'rgba(6, 7, 13, 0.34)';
+        ctx.fillRect(-20, -20, width + 40, height + 40);
+
+        const handler = MODE_HANDLERS[currentMode];
+        if (handler && state) {
+          handler.update(dt);
+          handler.draw();
+        }
+        updateAndDrawEffects(dt);
+        ctx.restore();
+
+        ctaTimer -= dt;
+        if (ctaTimer <= 0) {
+          showRandomCta();
+          ctaTimer = 14 + Math.random() * 8;
+        }
+
+        if (roundEndTimer > 0) {
+          roundEndTimer -= dt;
+          if (roundEndTimer <= 0) nextRound();
+        } else if (autoRotate) {
+          roundTimeLeft -= dt;
+          hudTimer.textContent = `${Math.max(0, Math.ceil(roundTimeLeft))}с`;
+          if (roundTimeLeft <= 0) {
+            playBreakSound();
+            nextRound();
+          }
+        } else {
+          hudTimer.textContent = '∞';
+        }
+
+        requestAnimationFrame(frame);
+      }
+
+      // --- Random Animated Like / Subscribe CTA ---
+      const CTA_VARIANTS = [
+        { icon: '👍', text: 'Like', cls: 'cta-text-like' },
+        { icon: '🔔', text: 'Subscribe', cls: 'cta-text-sub' },
+        { icon: '✨', text: 'Like & Subscribe', cls: 'cta-text-sub' }
+      ];
+
+      let ctaTimer = 6.5; // First appearance after ~6.5s, then every 14-22s
+      let ctaHideTimeout = null;
+
+      function showRandomCta() {
+        const variant = CTA_VARIANTS[Math.floor(Math.random() * CTA_VARIANTS.length)];
+        ctaIcon.textContent = variant.icon;
+        ctaLabel.textContent = variant.text;
+        ctaLabel.className = variant.cls;
+
+        // Pick non-intrusive position (upper zone or lower zone, slight horizontal variation)
+        const isTop = Math.random() < 0.55;
+        const topPct = isTop ? (12 + Math.random() * 5) : (79 + Math.random() * 5);
+        const leftPct = 50 + (Math.random() - 0.5) * 22;
+
+        ctaToast.style.top = `${topPct.toFixed(1)}%`;
+        ctaToast.style.left = `${leftPct.toFixed(1)}%`;
+        ctaToast.classList.add('show');
+
+        clearTimeout(ctaHideTimeout);
+        ctaHideTimeout = setTimeout(() => {
+          ctaToast.classList.remove('show');
+        }, 4200);
+      }
+
+      // --- UI Controls ---
+      modeButtons.forEach(btn => {
+        btn.addEventListener('click', () => initMode(btn.dataset.mode, true));
+      });
+
+      btnAutoRotate.addEventListener('click', () => {
+        autoRotate = !autoRotate;
+        btnAutoRotate.textContent = autoRotate ? 'Авто-смена: ВКЛ' : 'Авто-смена: ВЫКЛ';
+        btnAutoRotate.classList.toggle('active', autoRotate);
+      });
+
+      btnSound.addEventListener('click', () => setSound(!soundEnabled));
+      soundPrompt.addEventListener('click', () => setSound(true));
+      btnRestart.addEventListener('click', () => nextRound());
+
+      let idleHideTimer = null;
+      let manualObsHidden = false;
+
+      function setObsMode(hidden) {
+        controlsBar.classList.toggle('hidden', hidden);
+        btnShowObs.classList.toggle('visible', hidden);
+        if (hidden) soundPrompt.classList.add('hidden');
+      }
+
+      function scheduleAutoHideControls() {
+        clearTimeout(idleHideTimer);
+        if (manualObsHidden) return;
+        idleHideTimer = setTimeout(() => setObsMode(true), 7000);
+      }
+
+      controlsBar.addEventListener('mouseenter', () => clearTimeout(idleHideTimer));
+      controlsBar.addEventListener('mouseleave', scheduleAutoHideControls);
+
+      window.addEventListener('mousemove', () => {
+        if (!manualObsHidden && controlsBar.classList.contains('hidden')) setObsMode(false);
+        scheduleAutoHideControls();
+      });
+
+      btnHideObs.addEventListener('click', () => {
+        manualObsHidden = true;
+        clearTimeout(idleHideTimer);
+        setObsMode(true);
+      });
+
+      btnShowObs.addEventListener('click', () => {
+        manualObsHidden = false;
+        setObsMode(false);
+        scheduleAutoHideControls();
+      });
+
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'h' || e.key === 'H' || e.key === 'р' || e.key === 'Р') {
+          const isHidden = controlsBar.classList.contains('hidden');
+          manualObsHidden = !isHidden;
+          setObsMode(!isHidden);
+          if (isHidden) scheduleAutoHideControls();
+        }
+      });
+
+      document.addEventListener('pointerdown', () => {
+        if (soundEnabled && audioCtx && audioCtx.state === 'suspended') {
+          audioCtx.resume().then(() => soundPrompt.classList.add('hidden'));
+        }
+      }, { passive: true });
+
+      window.addEventListener('resize', resizeCanvas);
+      window.addEventListener('load', () => {
+        resizeCanvas();
+        setSound(true, false);
+        scheduleAutoHideControls();
+        requestAnimationFrame(frame);
+      });
+    })();
+  </script>
+</body>
+</html>
